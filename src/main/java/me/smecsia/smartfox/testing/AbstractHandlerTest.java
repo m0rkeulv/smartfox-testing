@@ -12,7 +12,9 @@ import com.smartfoxserver.v2.extensions.BaseServerEventHandler;
 import org.junit.Before;
 import org.powermock.api.mockito.PowerMockito;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -103,13 +105,55 @@ public abstract class AbstractHandlerTest extends AbstractRoomTest {
     @SuppressWarnings("unchecked")
     protected <T> T createHandler() {
         try {
-            String className = getClass().getName();
-            String handlerClass = className.substring(0, className.length() - 4);
-            return createHandler((Class<T>) Class.forName(handlerClass));
+            String testClassName = null;
+            StackTraceElement[] stackTracees = Thread.currentThread().getStackTrace();
+            for(StackTraceElement parent : stackTracees) {
+                String methodName = parent.getMethodName();
+                String className = parent.getClassName();
+
+                Class clazz = Class.forName(className);
+                //note: find method will the first method that maches the name (so avoid overloaded methods)
+                Method method = findMethod(methodName, clazz);
+                Annotation[] MemberAnotations = method.getAnnotations();
+                Annotation[] classAnotations = clazz.getAnnotations();
+                String classNameFromClass = getClassName(classAnotations);
+                String classNameFromMethod = getClassName(MemberAnotations);
+
+                if (classNameFromClass != null) {
+                    testClassName = classNameFromClass;
+                }
+                if (classNameFromMethod != null) {
+                    testClassName = classNameFromMethod;
+                }
+            }
+
+            if (testClassName == null) {
+                String className = getClass().getName();
+                String handlerClass = className.substring(0, className.length() - 4);
+                return createHandler((Class<T>) Class.forName(handlerClass));
+            }else {
+                return createHandler((Class<T>) Class.forName(testClassName));
+            }
         } catch (Exception e) {
             fail("Cannot create current request handler class:  " + e.getMessage());
             return null;
         }
+    }
+
+    private Method findMethod(String methodName, Class clazz){
+        for(Method m : clazz.getDeclaredMethods()) {
+            if (m.getName() == methodName) return m;
+        }
+        return null;
+    }
+
+    private String getClassName( Annotation[] memberAnotations) {
+        for(Annotation ano : memberAnotations) {
+            if (ano instanceof HandlerToTest){
+                return  ((HandlerToTest)ano).value().getName();
+            }
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")
